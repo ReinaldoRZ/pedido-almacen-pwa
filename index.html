@@ -1,0 +1,329 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedido de Almacen</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+    <style>
+        body {
+            font-family: Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f4f7;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #075E54;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 1.5em;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="date"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; 
+            font-size: 1em;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .whatsapp-btn, .clear-btn, .history-btn {
+            padding: 15px 20px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            flex-grow: 1;
+            transition: background-color 0.3s;
+        }
+        .whatsapp-btn {
+            background-color: #25D366;
+            color: white;
+            flex-grow: 2;
+        }
+        .whatsapp-btn:active { background-color: #128C7E; }
+
+        .clear-btn {
+            background-color: #ff9800;
+            color: white;
+            flex-grow: 1; 
+        }
+        .clear-btn:active { background-color: #e68900; }
+
+        .history-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ccc;
+        }
+        .history-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            list-style: none;
+        }
+        .history-item {
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px dashed #eee;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+        }
+        .history-item strong {
+            color: #075E54;
+            display: block;
+        }
+        .history-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        .history-btn:active { background-color: #d32f2f; }
+        .log-list {
+            font-size: 0.8em;
+            color: #777;
+            list-style: none;
+            padding: 0;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body onload="cargarHistorial()">
+
+<div class="container">
+    <h1>Pedido de Almacén</h1>
+    
+    <form id="warehouseForm">
+        
+        <label for="obra">🚧 Obra (Nº Orden Compra - Título):</label>
+        <input type="text" id="obra" required placeholder="Ej: 12345 - Ampliación de Oficinas">
+        
+        <label for="cliente">🏭 Cliente:</label>
+        <input type="text" id="cliente" required placeholder="Ej: Construcciones del Sur C.A.">
+        
+        <label for="solicitante">👷 Solicitante:</label>
+        <input type="text" id="solicitante" required placeholder="Ej: Juan Pérez">
+        
+        <label for="solicitud">📋 Solicitud (Cantidad y Descripción por línea):</label>
+        <textarea id="solicitud" required placeholder="Ejemplo:
+20 Tubería PVC de 1/2 pulgada
+5 Saco de cemento Portland"></textarea>
+        
+        <label for="fecha">📆 Requerido en obra para el día (Se selecciona la fecha):</label>
+        <input type="date" id="fecha" required>
+        
+        <label for="notas">Notas adicionales (Se añadirán con numeración 1. Nota):</label>
+        <textarea id="notas" placeholder="Ejemplo:
+Material urgente
+Confirmar stock antes de enviar"></textarea>
+        
+        <div class="btn-group">
+            <button type="button" onclick="enviarPorWhatsApp()" class="whatsapp-btn">
+                Enviar por WhatsApp
+            </button>
+            <button type="button" onclick="limpiarFormulario()" class="clear-btn">
+                Limpiar Formulario
+            </button>
+        </div>
+    </form>
+    
+    <div class="history-section">
+        <h2>Historial de Pedidos</h2>
+        <ul id="historyList" class="history-list">
+            <li>No hay pedidos guardados.</li>
+        </ul>
+        <button type="button" onclick="borrarHistorialConConfirmacion()" class="history-btn">
+            Borrar Historial
+        </button>
+
+        <h3 style="font-size: 1em;">Bitácora de Borrado</h3>
+        <ul id="logList" class="log-list">
+             <li>No hay registros de borrado.</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    const STORAGE_KEY_HISTORY = 'warehouse_history';
+    const STORAGE_KEY_LOG = 'warehouse_log';
+
+    // Función para obtener la fecha y hora actual en formato local
+    function getTimestamp() {
+        const now = new Date();
+        const date = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const time = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return `${date} ${time}`;
+    }
+
+    // Guarda el pedido en el localStorage
+    function guardarPedidoEnHistorial(obra, solicitante) {
+        const history = JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY) || '[]');
+        const newEntry = {
+            time: getTimestamp(),
+            obra: obra,
+            solicitante: solicitante
+        };
+        history.unshift(newEntry); // Añade al inicio
+        localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+        cargarHistorial(); // Refresca la lista en pantalla
+    }
+
+    // Carga y muestra el historial de pedidos y la bitácora
+    function cargarHistorial() {
+        const history = JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY) || '[]');
+        const log = JSON.parse(localStorage.getItem(STORAGE_KEY_LOG) || '[]');
+        const historyList = document.getElementById('historyList');
+        const logList = document.getElementById('logList');
+
+        // Renderiza el historial de pedidos
+        historyList.innerHTML = '';
+        if (history.length === 0) {
+            historyList.innerHTML = '<li>No hay pedidos guardados.</li>';
+        } else {
+            history.forEach(entry => {
+                const li = document.createElement('li');
+                li.className = 'history-item';
+                li.innerHTML = `<strong>${entry.obra}</strong><small>Solicitó: ${entry.solicitante}</small> (${entry.time})`;
+                historyList.appendChild(li);
+            });
+        }
+
+        // Renderiza la bitácora
+        logList.innerHTML = '';
+        if (log.length === 0) {
+            logList.innerHTML = '<li>No hay registros de borrado.</li>';
+        } else {
+            log.forEach(entry => {
+                const li = document.createElement('li');
+                li.innerHTML = `[${entry.time}] ${entry.message}`;
+                logList.appendChild(li);
+            });
+        }
+    }
+
+    // Registra un evento en la bitácora
+    function registrarBitacora(message) {
+        const log = JSON.parse(localStorage.getItem(STORAGE_KEY_LOG) || '[]');
+        const newEntry = {
+            time: getTimestamp(),
+            message: message
+        };
+        log.unshift(newEntry);
+        localStorage.setItem(STORAGE_KEY_LOG, JSON.stringify(log));
+    }
+
+    // Borra el historial con confirmación y registra el evento
+    function borrarHistorialConConfirmacion() {
+        const confirmation = confirm("¿Está seguro que desea borrar todo el historial de pedidos y la bitácora? Esta acción es irreversible.");
+        
+        if (confirmation) {
+            // Registrar y borrar Bitácora
+            registrarBitacora("Historial de pedidos y bitácora borrados por el usuario.");
+            localStorage.removeItem(STORAGE_KEY_LOG); // Borrar la bitácora después de registrar el evento
+            
+            // Borrar Historial
+            localStorage.removeItem(STORAGE_KEY_HISTORY);
+            
+            cargarHistorial(); // Refrescar la vista
+            alert("El historial y la bitácora han sido borrados.");
+        }
+    }
+
+    // Limpia todos los campos del formulario
+    function limpiarFormulario() {
+        document.getElementById('warehouseForm').reset();
+        document.getElementById('obra').focus(); 
+    }
+
+    function enviarPorWhatsApp() {
+        // Recolección de datos
+        const obra = document.getElementById('obra').value;
+        const cliente = document.getElementById('cliente').value;
+        const solicitante = document.getElementById('solicitante').value;
+        const solicitud = document.getElementById('solicitud').value.trim();
+        const fechaInput = document.getElementById('fecha').value; 
+        const notas = document.getElementById('notas').value.trim();
+
+        if (!obra || !cliente || !solicitante || !solicitud || !fechaInput) {
+            alert("Por favor, rellene todos los campos obligatorios.");
+            return;
+        }
+
+        // 1. Formatear Fecha (Dia semana Fecha)
+        let fechaFormateada = '';
+        if (fechaInput) {
+            const dateObj = new Date(fechaInput + 'T00:00:00'); 
+            const diaSemana = dateObj.toLocaleDateString('es-ES', { weekday: 'long' });
+            const fecha = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const diaSemanaCapitalizado = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
+            fechaFormateada = `${diaSemanaCapitalizado} ${fecha}`;
+        }
+        
+        // 2. Formatear Solicitud
+        const solicitudFormateada = solicitud.split('\n')
+            .map(item => item.trim())
+            .filter(item => item.length > 0)
+            .map(item => `- ${item}`)
+            .join('\n');
+
+        // 3. Formatear Notas Adicionales
+        let notasFormateadas = '';
+        if (notas) {
+             const notasArray = notas.split('\n').filter(n => n.trim() !== '');
+             notasFormateadas = notasArray.map((nota, index) => `${index + 1}. ${nota.trim()}`).join('\n');
+        }
+
+        // 4. Construir el mensaje final (Formato solicitado)
+        const mensaje = 
+`*PEDIDO DE ALMACÉN*
+
+🚧 *Obra*: ${obra}
+
+🏭 *Cliente*: ${cliente}
+
+👷 *Solicitante*: ${solicitante}
+
+📋 *Solicitud*: 
+${solicitudFormateada}
+
+📆 *Requerido en obra para el día*:
+- ${fechaFormateada}
+${notas ? '\n*Notas adicionales*\n' + notasFormateadas : ''}`; 
+
+        // 5. Guardar el pedido en el historial antes de enviarlo
+        guardarPedidoEnHistorial(obra, solicitante);
+        
+        // 6. Abrir WhatsApp
+        const whatsappURL = 'whatsapp://send?text=' + encodeURIComponent(mensaje);
+        window.location.href = whatsappURL;
+    }
+</script>
+
+</body>
+</html>
