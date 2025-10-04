@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -83,22 +83,38 @@
             border-top: 1px solid #ccc;
         }
         .history-list {
-            max-height: 200px;
+            max-height: 300px; /* Aumentado para más espacio */
             overflow-y: auto;
             border: 1px solid #ddd;
-            padding: 10px;
+            padding: 0 10px; /* Ajuste para mejor padding */
             list-style: none;
         }
         .history-item {
-            margin-bottom: 10px;
-            padding-bottom: 5px;
+            margin: 0;
+            padding: 10px 0;
             border-bottom: 1px dashed #eee;
             font-size: 0.9em;
-            white-space: pre-wrap;
+            cursor: pointer; /* Indica que se puede hacer clic */
+        }
+        .history-item:last-child {
+            border-bottom: none;
         }
         .history-item strong {
             color: #075E54;
             display: block;
+        }
+        .history-details {
+            display:none; /* Inicialmente oculto */
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            margin-top: 5px;
+            white-space: pre-wrap;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        .history-details p {
+            margin: 3px 0;
         }
         .history-btn {
             background-color: #f44336;
@@ -114,12 +130,12 @@
         }
     </style>
 </head>
-<body onload="cargarHistorial()">
+<body onload="cargarDatos()">
 
 <div class="container">
     <h1>Pedido de Almacén</h1>
     
-    <form id="warehouseForm">
+    <form id="warehouseForm" oninput="guardarFormulario()">
         
         <label for="obra">🚧 Obra (Nº Orden Compra - Título):</label>
         <input type="text" id="obra" required placeholder="Ej: 12345 - Ampliación de Oficinas">
@@ -147,7 +163,7 @@ Confirmar stock antes de enviar"></textarea>
             <button type="button" onclick="enviarPorWhatsApp()" class="whatsapp-btn">
                 Enviar por WhatsApp
             </button>
-            <button type="button" onclick="limpiarFormulario()" class="clear-btn">
+            <button type="button" onclick="limpiarFormulario(true)" class="clear-btn">
                 Limpiar Formulario
             </button>
         </div>
@@ -172,8 +188,9 @@ Confirmar stock antes de enviar"></textarea>
 <script>
     const STORAGE_KEY_HISTORY = 'warehouse_history';
     const STORAGE_KEY_LOG = 'warehouse_log';
+    const STORAGE_KEY_FORM = 'warehouse_form_data';
 
-    // Función para obtener la fecha y hora actual en formato local
+    // Función para obtener la fecha y hora actual
     function getTimestamp() {
         const now = new Date();
         const date = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -181,14 +198,58 @@ Confirmar stock antes de enviar"></textarea>
         return `${date} ${time}`;
     }
 
-    // Guarda el pedido en el localStorage
-    function guardarPedidoEnHistorial(obra, solicitante) {
+    // ***************************************************************
+    // PERSISTENCIA DEL FORMULARIO Y HISTORIAL
+    // ***************************************************************
+    
+    // Función principal que carga todos los datos al iniciar la página
+    function cargarDatos() {
+        cargarHistorial();
+        cargarFormulario(); // Carga los datos guardados del formulario
+    }
+
+    // Guarda los datos del formulario en localStorage
+    function guardarFormulario() {
+        const formData = {
+            obra: document.getElementById('obra').value,
+            cliente: document.getElementById('cliente').value,
+            solicitante: document.getElementById('solicitante').value,
+            solicitud: document.getElementById('solicitud').value,
+            fecha: document.getElementById('fecha').value,
+            notas: document.getElementById('notas').value,
+        };
+        localStorage.setItem(STORAGE_KEY_FORM, JSON.stringify(formData));
+    }
+
+    // Carga los datos del formulario desde localStorage
+    function cargarFormulario() {
+        const storedData = localStorage.getItem(STORAGE_KEY_FORM);
+        if (storedData) {
+            const formData = JSON.parse(storedData);
+            document.getElementById('obra').value = formData.obra || '';
+            document.getElementById('cliente').value = formData.cliente || '';
+            document.getElementById('solicitante').value = formData.solicitante || '';
+            document.getElementById('solicitud').value = formData.solicitud || '';
+            document.getElementById('fecha').value = formData.fecha || '';
+            document.getElementById('notas').value = formData.notas || '';
+        }
+    }
+
+    // Guarda el pedido COMPLETO en el localStorage
+    function guardarPedidoEnHistorial(data) {
         const history = JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY) || '[]');
+        
         const newEntry = {
             time: getTimestamp(),
-            obra: obra,
-            solicitante: solicitante
+            // Guarda todos los campos del formulario
+            obra: data.obra,
+            cliente: data.cliente,
+            solicitante: data.solicitante,
+            solicitud: data.solicitud,
+            fecha: data.fecha,
+            notas: data.notas
         };
+        
         history.unshift(newEntry); // Añade al inicio
         localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
         cargarHistorial(); // Refresca la lista en pantalla
@@ -206,10 +267,32 @@ Confirmar stock antes de enviar"></textarea>
         if (history.length === 0) {
             historyList.innerHTML = '<li>No hay pedidos guardados.</li>';
         } else {
-            history.forEach(entry => {
+            history.forEach((entry, index) => {
                 const li = document.createElement('li');
                 li.className = 'history-item';
-                li.innerHTML = `<strong>${entry.obra}</strong><small>Solicitó: ${entry.solicitante}</small> (${entry.time})`;
+                
+                // Formato de solicitud para visualización
+                const formattedSolicitud = entry.solicitud.split('\n')
+                    .map(item => item.trim())
+                    .filter(item => item.length > 0)
+                    .map(item => `- ${item}`)
+                    .join('\n');
+                
+                // Generar contenido completo y colapsable
+                const content = `
+                    <div onclick="toggleDetails(${index})" style="cursor: pointer;">
+                        <strong>Pedido #${history.length - index} | Obra: ${entry.obra}</strong>
+                        <small>Solicitante: ${entry.solicitante} (${entry.time})</small>
+                    </div>
+                    <div id="details-${index}" class="history-details">
+                        <p><strong>Cliente:</strong> ${entry.cliente}</p>
+                        <p><strong>Requerido para:</strong> ${entry.fecha}</p>
+                        <p><strong>Solicitud:</strong><br>${formattedSolicitud}</p>
+                        ${entry.notas ? `<p><strong>Notas:</strong><br>${entry.notas}</p>` : ''}
+                    </div>
+                `;
+                
+                li.innerHTML = content;
                 historyList.appendChild(li);
             });
         }
@@ -226,6 +309,17 @@ Confirmar stock antes de enviar"></textarea>
             });
         }
     }
+    
+    // Función para expandir/colapsar los detalles del historial
+    function toggleDetails(index) {
+        const details = document.getElementById(`details-${index}`);
+        if (details.style.display === "none" || details.style.display === "") {
+            details.style.display = "block";
+        } else {
+            details.style.display = "none";
+        }
+    }
+
 
     // Registra un evento en la bitácora
     function registrarBitacora(message) {
@@ -243,23 +337,28 @@ Confirmar stock antes de enviar"></textarea>
         const confirmation = confirm("¿Está seguro que desea borrar todo el historial de pedidos y la bitácora? Esta acción es irreversible.");
         
         if (confirmation) {
-            // Registrar y borrar Bitácora
             registrarBitacora("Historial de pedidos y bitácora borrados por el usuario.");
-            localStorage.removeItem(STORAGE_KEY_LOG); // Borrar la bitácora después de registrar el evento
-            
-            // Borrar Historial
+            localStorage.removeItem(STORAGE_KEY_LOG);
             localStorage.removeItem(STORAGE_KEY_HISTORY);
             
-            cargarHistorial(); // Refrescar la vista
+            cargarHistorial();
             alert("El historial y la bitácora han sido borrados.");
         }
     }
 
-    // Limpia todos los campos del formulario
-    function limpiarFormulario() {
+    // Limpia el formulario y opcionalmente el localStorage (si clearLocalStorage es true)
+    function limpiarFormulario(clearLocalStorage = false) {
         document.getElementById('warehouseForm').reset();
-        document.getElementById('obra').focus(); 
+        
+        if (clearLocalStorage) {
+            localStorage.removeItem(STORAGE_KEY_FORM);
+            document.getElementById('obra').focus();
+        }
     }
+
+    // ***************************************************************
+    // FUNCIÓN DE ENVÍO
+    // ***************************************************************
 
     function enviarPorWhatsApp() {
         // Recolección de datos
@@ -275,7 +374,17 @@ Confirmar stock antes de enviar"></textarea>
             return;
         }
 
-        // 1. Formatear Fecha (Dia semana Fecha)
+        // Datos completos a guardar en el historial (antes de formatear para WhatsApp)
+        const rawDataForHistory = {
+            obra: obra,
+            cliente: cliente,
+            solicitante: solicitante,
+            solicitud: solicitud,
+            fecha: fechaInput, // Guardamos la fecha RAW (YYYY-MM-DD) para consistencia
+            notas: notas
+        };
+
+        // 1. Formatear Fecha para WhatsApp
         let fechaFormateada = '';
         if (fechaInput) {
             const dateObj = new Date(fechaInput + 'T00:00:00'); 
@@ -285,21 +394,21 @@ Confirmar stock antes de enviar"></textarea>
             fechaFormateada = `${diaSemanaCapitalizado} ${fecha}`;
         }
         
-        // 2. Formatear Solicitud
+        // 2. Formatear Solicitud para WhatsApp
         const solicitudFormateada = solicitud.split('\n')
             .map(item => item.trim())
             .filter(item => item.length > 0)
             .map(item => `- ${item}`)
             .join('\n');
 
-        // 3. Formatear Notas Adicionales
+        // 3. Formatear Notas Adicionales para WhatsApp
         let notasFormateadas = '';
         if (notas) {
              const notasArray = notas.split('\n').filter(n => n.trim() !== '');
              notasFormateadas = notasArray.map((nota, index) => `${index + 1}. ${nota.trim()}`).join('\n');
         }
 
-        // 4. Construir el mensaje final (Formato solicitado)
+        // 4. Construir el mensaje final de WhatsApp
         const mensaje = 
 `*PEDIDO DE ALMACÉN*
 
@@ -316,10 +425,13 @@ ${solicitudFormateada}
 - ${fechaFormateada}
 ${notas ? '\n*Notas adicionales*\n' + notasFormateadas : ''}`; 
 
-        // 5. Guardar el pedido en el historial antes de enviarlo
-        guardarPedidoEnHistorial(obra, solicitante);
+        // 5. Guardar el pedido completo en el historial
+        guardarPedidoEnHistorial(rawDataForHistory);
         
-        // 6. Abrir WhatsApp
+        // 6. Limpiar el formulario y borrar los datos guardados, ya que el pedido fue exitoso
+        limpiarFormulario(true);
+
+        // 7. Abrir WhatsApp
         const whatsappURL = 'whatsapp://send?text=' + encodeURIComponent(mensaje);
         window.location.href = whatsappURL;
     }
