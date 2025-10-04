@@ -83,10 +83,10 @@
             border-top: 1px solid #ccc;
         }
         .history-list {
-            max-height: 300px; /* Aumentado para más espacio */
+            max-height: 300px; 
             overflow-y: auto;
             border: 1px solid #ddd;
-            padding: 0 10px; /* Ajuste para mejor padding */
+            padding: 0 10px; 
             list-style: none;
         }
         .history-item {
@@ -94,7 +94,7 @@
             padding: 10px 0;
             border-bottom: 1px dashed #eee;
             font-size: 0.9em;
-            cursor: pointer; /* Indica que se puede hacer clic */
+            cursor: pointer; 
         }
         .history-item:last-child {
             border-bottom: none;
@@ -104,7 +104,7 @@
             display: block;
         }
         .history-details {
-            display:none; /* Inicialmente oculto */
+            display:none; 
             padding: 10px;
             background-color: #f9f9f9;
             border-radius: 4px;
@@ -205,7 +205,7 @@ Confirmar stock antes de enviar"></textarea>
     // Función principal que carga todos los datos al iniciar la página
     function cargarDatos() {
         cargarHistorial();
-        cargarFormulario(); // Carga los datos guardados del formulario
+        cargarFormulario(); 
     }
 
     // Guarda los datos del formulario en localStorage
@@ -332,17 +332,24 @@ Confirmar stock antes de enviar"></textarea>
         localStorage.setItem(STORAGE_KEY_LOG, JSON.stringify(log));
     }
 
-    // Borra el historial con confirmación y registra el evento
+    // ***************************************************************
+    // FUNCIÓN DE BORRADO DE HISTORIAL (CORREGIDA)
+    // ***************************************************************
     function borrarHistorialConConfirmacion() {
-        const confirmation = confirm("¿Está seguro que desea borrar todo el historial de pedidos y la bitácora? Esta acción es irreversible.");
+        const confirmation = confirm("¿Está seguro que desea borrar todo el historial de pedidos? La Bitácora se conservará.");
         
         if (confirmation) {
-            registrarBitacora("Historial de pedidos y bitácora borrados por el usuario.");
-            localStorage.removeItem(STORAGE_KEY_LOG);
+            // 1. Eliminar SOLAMENTE el historial de pedidos
             localStorage.removeItem(STORAGE_KEY_HISTORY);
             
+            // 2. Registrar la acción en la Bitácora (IMPORTANTE: la bitácora NO se elimina)
+            registrarBitacora("Historial de pedidos borrado por el usuario.");
+            
+            // 3. Recargar la visualización para mostrar el historial vacío y la bitácora actualizada
             cargarHistorial();
-            alert("El historial y la bitácora han sido borrados.");
+            
+            // 4. Informar al usuario
+            alert("El historial de pedidos ha sido borrado. La bitácora ha guardado este registro.");
         }
     }
 
